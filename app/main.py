@@ -31,7 +31,7 @@ except Exception as e:
 
     
 
-my_post = [{"id": 1, "title": "Post 1", "content": "Content of post 1", "published": True, "rating": 5}]
+#my_post = [{"id": 1, "title": "Post 1", "content": "Content of post 1", "published": True, "rating": 5}]
 
 @app.get("/")
 async def root():
@@ -39,14 +39,18 @@ async def root():
 
 @app.get("/posts")
 async def get_posts():
-    return {"data": my_post}
+    cursor.execute("""SELECT * FROM posts""")
+    posts = cursor.fetchall()
+    print(posts)
+    return {"data": posts}
 
 @app.post("/createpost" , status_code=status.HTTP_201_CREATED)
 async def create_post (new_post: Post): #validate new_post as Post model
-    post_dict = new_post.dict()
-    post_dict['id'] = len(my_post) + 1
-    my_post.append(post_dict)
-    return {"data": my_post}
+    cursor.execute("""INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING  * """, # returting * means return all columns to the api 
+                   (new_post.title, new_post.content, new_post.published))
+    new_post = cursor.fetchone()
+    conn.commit()  # Commit the transaction to save changes
+    return {"data": new_post}
 
 #title: str
 #conteent: str
@@ -54,10 +58,10 @@ async def create_post (new_post: Post): #validate new_post as Post model
 
 @app.get("/posts/latest")
 async def get_latest_post():
-    if not my_post:
-        return {"error": "No posts available"}
-    
-    latest_post = my_post[-1]
+    cursor.execute("""SELECT * FROM posts ORDER BY id DESC LIMIT 1 """)
+    latest_post = cursor.fetchone()
+    if not latest_post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No posts available")
     return {"latest_post": latest_post}
 
 
@@ -65,59 +69,45 @@ async def get_latest_post():
 
 @app.get("/posts/{id}")
 async def get_post(id: int): # validate id as integer
-    post = None
-    for p in my_post: 
-        if p["id"] == id: 
-            post = p 
-            break
-    
+    cursor.execute("""SELECT * FROM posts WHERE id = %s""", (str(id),))
+    post = cursor.fetchone()
+
+  
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     
     return {"post_detail": post}
 
 
+
+
 @app.delete("/posts/{id}", status_code=status.HTTP_200_OK)
 async def delete_post(id: int):
-    global my_post
-    
-    # Check if the post exists before deletion
-    post_found = False
-    for p in my_post:
-        if p["id"] == id:
-            post_found = True
-            break
-
-    
-    if not post_found:
+    cursor.execute("""DELETE FROM posts WHERE id = %s RETURNING *""", (str(id),))
+    deleted_post = cursor.fetchone()
+    if not deleted_post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    
-    # Remove the post
-    my_post = [p for p in my_post if p["id"] != id]
-    
+    conn.commit()  # Commit the transaction to save changes
     return {"message": "Post deleted successfully"}
 
 
 @app.put("/posts/{id}", status_code=status.HTTP_200_OK)
 async def update_post(id: int, update_post: PostUpdate):
-    global my_post
+    # First get the existing post to use as defaults for None values
+    cursor.execute("""SELECT * FROM posts WHERE id = %s""", (str(id),))
+    existing_post = cursor.fetchone()
     
-    # Find the post to update
-    post_found = False
-    for i, p in enumerate(my_post):
-        if p["id"] == id:
-            post_found = True
-            # Update the post with new values
-            if update_post.title is not None:
-                my_post[i]["title"] = update_post.title
-            if update_post.content is not None:
-                my_post[i]["content"] = update_post.content
-            if update_post.published is not None:
-                my_post[i]["published"] = update_post.published
-            
-            break
-    
-    if not post_found:
+    if not existing_post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     
-    return {"message": "Post updated successfully", "post": my_post[i]}
+    # Use existing values if new values are None
+    title = update_post.title if update_post.title is not None else existing_post['title']
+    content = update_post.content if update_post.content is not None else existing_post['content']
+    published = update_post.published if update_post.published is not None else existing_post['published']
+    
+    cursor.execute("""UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s RETURNING *""",
+                   (title, content, published, str(id)))
+    updated_post = cursor.fetchone()
+    conn.commit()
+    
+    return {"message": "Post updated successfully", "post": updated_post}
