@@ -33,8 +33,15 @@ class User_Response(BaseModel):
     class Config:
         from_attributes = True  # Enable ORM mode to read data from SQLAlchemy models
 
-class User_login(BaseModel):
+class User_login(BaseModel):   #used form instead 
     email: EmailStr
     password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    id: Optional[str] = None
 
 #pydantic models end

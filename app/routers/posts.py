@@ -1,4 +1,4 @@
-from .. import models, schemas
+from .. import models, schemas , oauth2
 from ..database import  get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session 
@@ -16,7 +16,7 @@ router = APIRouter(
 
 
 @router.get("/")
-async def get_posts(db: Session = Depends(get_db)):
+async def get_posts(db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user)):
     posts = db.query(models.Post).all()  # Fetch all posts from the database
     if not posts:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No posts found")
@@ -31,7 +31,9 @@ async def get_posts(db: Session = Depends(get_db)):
 
 
 @router.post("/" , status_code=status.HTTP_201_CREATED , response_model=schemas.PostResponse)  # Use response_model to return PostResponse schema
-async def create_post (new_post: schemas.Post , db: Session = Depends(get_db)): #validate new_post as Post model
+async def create_post (new_post: schemas.Post , db: Session = Depends(get_db) , 
+                       user_id :int = Depends(oauth2.get_current_user)): #validate new_post as Post model
+    print(user_id)  
     new_post = models.Post(title=new_post.title, content=new_post.content, published=new_post.published) #or use new_post = models.Post(**new_post.dict())
     db.add(new_post)  # Add the new post to the session
     db.commit()  # Commit the transaction to save changes
@@ -44,7 +46,7 @@ async def create_post (new_post: schemas.Post , db: Session = Depends(get_db)): 
 
 
 @router.get("/latest" ,  response_model=schemas.PostResponse)  # Use response_model to return PostResponse schema
-async def get_latest_post(db: Session = Depends(get_db)) :
+async def get_latest_post(db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user)) :
     latest_post = db.query(models.Post).order_by(models.Post.id.desc()).first()
 
     
@@ -60,7 +62,7 @@ async def get_latest_post(db: Session = Depends(get_db)) :
 
 
 @router.get("/{id}", response_model=schemas.PostResponse)  # Use response_model to return PostResponse schema
-async def get_post(id: int , db: Session = Depends(get_db)): # validate id as integer
+async def get_post(id: int , db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user)): # validate id as integer
     post = db.query(models.Post).filter(models.Post.id == id).first()
   
     if post is None:
@@ -72,7 +74,7 @@ async def get_post(id: int , db: Session = Depends(get_db)): # validate id as in
 
 
 @router.delete("/{id}", status_code=status.HTTP_200_OK)
-async def delete_post(id: int , db: Session = Depends(get_db)):
+async def delete_post(id: int , db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user)):
     delete_post = db.query(models.Post).filter(models.Post.id == id)
     if not delete_post.first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
@@ -89,7 +91,7 @@ async def delete_post(id: int , db: Session = Depends(get_db)):
 
 
 @router.put("/{id}", status_code=status.HTTP_200_OK , response_model=schemas.PostResponse)  # Use response_model to return PostResponse schema
-async def update_post(id: int, update_post: schemas.PostUpdate , db: Session = Depends(get_db)):
+async def update_post(id: int, update_post: schemas.PostUpdate , db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user)):
     existing_post = db.query(models.Post).filter(models.Post.id == id)
     
     
