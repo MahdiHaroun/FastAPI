@@ -2,6 +2,7 @@ from .. import models, schemas , oauth2
 from ..database import  get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session 
+from typing import Optional , List
 
 
 router = APIRouter(
@@ -15,9 +16,11 @@ router = APIRouter(
 
 
 
-@router.get("/")
-async def get_posts(db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user)):
-    posts = db.query(models.Post).all()  # Fetch all posts from the database
+@router.get("/" , response_model= list[schemas.PostResponse])  # Use response_model to return PostResponse schema
+async def get_posts(db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user), 
+                    limit: int = 10 , skip: int = 0 , search: Optional[str] = ""):
+    
+    posts = db.query(models.Post).filter(models.Post.user_id == user_id.id , models.Post.title.contains(search)).limit(limit).offset(skip).all()  # Filter first, then limit
     if not posts:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No posts found")
     
@@ -34,7 +37,7 @@ async def get_posts(db: Session = Depends(get_db) , user_id :int = Depends(oauth
 async def create_post (new_post: schemas.Post , db: Session = Depends(get_db) , 
                        user_id :int = Depends(oauth2.get_current_user)): #validate new_post as Post model
     print(user_id)  
-    new_post = models.Post(title=new_post.title, content=new_post.content, published=new_post.published) #or use new_post = models.Post(**new_post.dict())
+    new_post = models.Post(title=new_post.title, content=new_post.content, published=new_post.published , user_id = user_id.id) #or use new_post = models.Post(**new_post.dict())
     db.add(new_post)  # Add the new post to the session
     db.commit()  # Commit the transaction to save changes
     db.refresh(new_post)  # Refresh the instance to get the updated data
@@ -79,6 +82,9 @@ async def delete_post(id: int , db: Session = Depends(get_db) , user_id :int = D
     if not delete_post.first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     
+    if delete_post.first().user_id != user_id.id:  # Check if the post belongs to the current user
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this post")
+    
     delete_post.delete(synchronize_session=False)  # Delete the post
     db.commit()  # Commit the transaction to save changes
 
@@ -99,6 +105,9 @@ async def update_post(id: int, update_post: schemas.PostUpdate , db: Session = D
     
     if not existing_post.first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    
+    if existing_post.first().user_id != user_id.id:  # Check if the post belongs to the current user
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this post")
     
     existing_post.update({
         "title": update_post.title if update_post.title is not None else existing_post.first().title,                    #or use  existing_post.update(post.dict())
