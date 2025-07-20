@@ -26,9 +26,18 @@ class PostResponse(BaseModel):
     title: str
     content: str
     published: bool
+    id: int
     user_id : int
     created_at: datetime  # Changed from str to datetime
     owner : User_Response  
+    
+
+    class Config:
+        from_attributes = True
+
+class PostWithVotes(BaseModel):
+    Post: PostResponse
+    votes: int
 
     class Config:
         from_attributes = True
@@ -51,5 +60,13 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     id: Optional[str] = None
+
+
+
+class Vote(BaseModel):
+    post_id : int  
+    dir : int  # 0 or 1, will validate in the route
+
+
 
 #pydantic models end

@@ -3,6 +3,7 @@ from ..database import  get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session 
 from typing import Optional , List
+from sqlalchemy import func
 
 
 router = APIRouter(
@@ -16,16 +17,30 @@ router = APIRouter(
 
 
 
-@router.get("/" , response_model= list[schemas.PostResponse])  # Use response_model to return PostResponse schema
+@router.get("/", response_model=List[schemas.PostWithVotes])  # Use response_model to return PostWithVotes schema
 async def get_posts(db: Session = Depends(get_db) , user_id :int = Depends(oauth2.get_current_user), 
                     limit: int = 10 , skip: int = 0 , search: Optional[str] = ""):
     
-    posts = db.query(models.Post).filter(models.Post.user_id == user_id.id , models.Post.title.contains(search)).limit(limit).offset(skip).all()  # Filter first, then limit
-    if not posts:
+    # Query posts with vote counts using ORM
+    results = db.query(models.Post, func.count(models.Vote.post_id).label("votes")).join(
+        models.Vote, models.Vote.post_id == models.Post.id, isouter=True
+    ).filter(
+        models.Post.user_id == user_id.id, 
+        models.Post.title.contains(search)
+    ).group_by(models.Post.id).limit(limit).offset(skip).all()
+    
+    if not results:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No posts found")
     
-
-    return posts
+    # Convert the results to the expected format
+    formatted_results = []
+    for post, vote_count in results:
+        formatted_results.append({
+            "Post": post,
+            "votes": vote_count
+        })
+    
+    return formatted_results
 
 
 
