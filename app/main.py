@@ -19,4 +19,4 @@ app.include_router(vote.router)  # Include the vote router
 
 @app.get("/")  # Root endpoint
 def root():
-    return {"message": "Welcome to the API!"}
+    return {"message": "Welcome to the API!!"}
